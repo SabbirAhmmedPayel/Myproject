@@ -35,7 +35,7 @@ export default function AuthPage() {
           // Store JWT token for future requests
           localStorage.setItem('token', data.token);
           alert("Login successful!");
-          navigate('/'); // Send user to the home/dashboard page
+          navigate('/inventory'); // Send user to the inventory page
         }
       } else {
         setError(data.error || "Something went wrong. Please try again.");

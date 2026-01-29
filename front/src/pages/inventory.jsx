@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Package, RefreshCcw, DollarSign, Database, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import SingleProduct from '../components/SingleProduct';
+import '../style/inventory.css';
 
 const Inventory = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
+  const navigate = useNavigate();
 
   // Form State
   const [formData, setFormData] = useState({
@@ -14,6 +17,21 @@ const Inventory = () => {
     price: '',
     quantity: ''
   });
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get('http://localhost:3002/api/inventory');
+        setProducts(res.data || []);
+      } catch (err) {
+        console.error('Failed to load products', err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   const handleSync = async (e) => {
     e.preventDefault();
@@ -39,7 +57,7 @@ const Inventory = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0e27] via-[#0f1629] to-[#1a1f3a] text-slate-100 p-8 font-sans relative overflow-hidden">
+    <div className="inventory-container app-container">
 
       {/* Premium Background Effects */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -54,8 +72,8 @@ const Inventory = () => {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                  <Sparkles className="text-white" size={20} />
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/30 text-xl">
+                  <span className="text-white">✨</span>
                 </div>
                 <h1 className="text-5xl font-bold tracking-tight">
                   <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">
@@ -72,12 +90,20 @@ const Inventory = () => {
             <div className="flex items-center gap-3">
               <div className="px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/20 backdrop-blur-xl">
                 <div className="flex items-center gap-3">
-                  <ShieldCheck className="text-cyan-400" size={20} />
+                  <span className="text-cyan-400">✅</span>
                   <div>
                     <p className="text-xs text-slate-400">System Status</p>
                     <p className="text-sm font-semibold text-cyan-400">Operational</p>
                   </div>
                 </div>
+              </div>
+              <div>
+                <button
+                  onClick={() => navigate('/create-product')}
+                  className="px-4 py-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
+                >
+                  Create Product
+                </button>
               </div>
             </div>
           </div>
@@ -92,8 +118,8 @@ const Inventory = () => {
               {/* Card Header */}
               <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-b border-blue-500/20 p-6">
                 <h2 className="text-xl font-bold flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                    <Package size={20} className="text-white" />
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-lg">
+                    <span className="text-white">📦</span>
                   </div>
                   <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
                     New Asset
@@ -121,7 +147,7 @@ const Inventory = () => {
                       Price
                     </label>
                     <div className="relative">
-                      <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">$</span>
                       <input
                         type="number"
                         placeholder="0.00"
@@ -153,9 +179,9 @@ const Inventory = () => {
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
                   {loading ? (
-                    <RefreshCcw className="animate-spin" size={20} />
+                    <span className="animate-spin">⟳</span>
                   ) : (
-                    <Database size={20} />
+                    <span>🗄️</span>
                   )}
                   <span className="relative z-10">
                     {syncStatus === 'success' ? 'Successfully Synced' : 'Sync to Orders'}
@@ -168,14 +194,14 @@ const Inventory = () => {
             <div className="mt-6 grid grid-cols-2 gap-4">
               <div className="bg-gradient-to-br from-blue-500/10 to-transparent backdrop-blur-xl border border-blue-500/20 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="text-blue-400" size={16} />
+                  <span className="text-blue-400">📈</span>
                   <p className="text-xs text-slate-400 font-semibold">Total Value</p>
                 </div>
                 <p className="text-2xl font-bold text-white">$124.5K</p>
               </div>
               <div className="bg-gradient-to-br from-cyan-500/10 to-transparent backdrop-blur-xl border border-cyan-500/20 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Database className="text-cyan-400" size={16} />
+                  <span className="text-cyan-400">🗄️</span>
                   <p className="text-xs text-slate-400 font-semibold">Items</p>
                 </div>
                 <p className="text-2xl font-bold text-white">1,247</p>
@@ -197,6 +223,16 @@ const Inventory = () => {
                     <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
                     <span className="text-xs text-cyan-400 font-semibold">Live</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Cards: SingleProduct view */}
+              <div className="mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {products.length === 0 && !loading && <div className="text-slate-400">No products</div>}
+                  {products.map(p => (
+                    <SingleProduct key={p.id || p.sku} product={p} />
+                  ))}
                 </div>
               </div>
 
@@ -224,8 +260,8 @@ const Inventory = () => {
                     <tr className="hover:bg-blue-500/5 transition-all duration-300 group">
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center border border-blue-500/30">
-                            <Package size={18} className="text-blue-400" />
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center border border-blue-500/30 text-lg">
+                            <span className="text-blue-400">📦</span>
                           </div>
                           <span className="font-semibold text-white group-hover:text-blue-400 transition-colors">
                             Neural Link V2
@@ -254,8 +290,8 @@ const Inventory = () => {
                     <tr className="hover:bg-blue-500/5 transition-all duration-300 group">
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center border border-blue-500/30">
-                            <Package size={18} className="text-blue-400" />
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center border border-blue-500/30 text-lg">
+                            <span className="text-blue-400">📦</span>
                           </div>
                           <span className="font-semibold text-white group-hover:text-blue-400 transition-colors">
                             Quantum Processor X1
@@ -284,8 +320,8 @@ const Inventory = () => {
                     <tr className="hover:bg-blue-500/5 transition-all duration-300 group">
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center border border-blue-500/30">
-                            <Package size={18} className="text-blue-400" />
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center border border-blue-500/30 text-lg">
+                            <span className="text-blue-400">📦</span>
                           </div>
                           <span className="font-semibold text-white group-hover:text-blue-400 transition-colors">
                             Holographic Display Pro

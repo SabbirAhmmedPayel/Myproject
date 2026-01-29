@@ -1,5 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/login'
+import Inventory from './pages/inventory'
+import CreateProduct from './pages/createProduct'
+import Checkout from './pages/checkout'
 import './App.css'
 
 function App() {
@@ -10,11 +13,17 @@ function App() {
     <div className="App">
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route 
+          path="/inventory" 
+          element={isAuthenticated ? <Inventory /> : <Navigate to="/login" />} 
+        />
+        <Route path="/create-product" element={isAuthenticated ? <CreateProduct /> : <Navigate to="/login" />} />
+        <Route path="/checkout" element={isAuthenticated ? <Checkout /> : <Navigate to="/login" />} />
         
-        {/* Redirect home to login if not authenticated */}
+        {/* Redirect home to inventory if authenticated, otherwise to login */}
         <Route 
           path="/" 
-          element={isAuthenticated ? <h1>Welcome to Dashboard</h1> : <Navigate to="/login" />} 
+          element={isAuthenticated ? <Navigate to="/inventory" /> : <Navigate to="/login" />} 
         />
 
         {/* Catch-all route */}
