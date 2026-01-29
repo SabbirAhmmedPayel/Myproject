@@ -1,18 +1,20 @@
-# Use Node.js LTS version
-FROM node:20-alpine
+# Use a slim version of Node for a smaller image size
+FROM node:20-slim
 
-# Set the working directory inside the container
+# Create app directory
 WORKDIR /app
-
-# Copy package files and install dependencies
+# Install app dependencies
+# Copying package files first helps with Docker caching
 COPY package*.json ./
-RUN npm install
 
-# Copy the rest of the backend code
+# Install only production dependencies
+RUN npm install --production
+
+# Bundle app source
 COPY . .
 
-# Expose the port your Express app runs on
+# Expose the port your index.js is listening on
 EXPOSE 3000
 
 # Start the application
-CMD ["node", "index.js"]
+CMD [ "node", "index.js" ]
