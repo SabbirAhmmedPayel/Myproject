@@ -47,3 +47,12 @@ services:
       - /app/node_modules
     depends_on:
       - backend
+  #order
+  product-db:
+  image: postgres:15
+  environment:
+    POSTGRES_DB: productdb
+    POSTGRES_USER: product
+    POSTGRES_PASSWORD: productpass
+  volumes:
+    - ./product/init.sql:/docker-entrypoint-initdb.d/init.sql
