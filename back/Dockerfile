@@ -11,8 +11,8 @@ RUN npm install
 # Copy the rest of the backend code
 COPY . .
 
-# Expose the port your Express app runs on
-EXPOSE 3000
+# Expose the port your Express app runs on (Inventory Service default)
+EXPOSE 3002
 
 # Start the application
 CMD ["node", "index.js"]
