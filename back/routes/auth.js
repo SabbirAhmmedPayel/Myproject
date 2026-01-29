@@ -5,9 +5,10 @@ const jwt = require('jsonwebtoken');
 const pool = require('../db');
 const axios = require('axios');
 
-// The URL of your other backend (usually stored in .env)
-const OTHER_BACKEND_URL = 'http://localhost:5001/api/users/sync'; 
-const SHARED_SECRET = 'your_internal_secret_key'; 
+// Fetching URLs and Secret from environment variables (set in docker-compose)
+const INVENTORY_SYNC_URL = process.env.INVENTORY_URL; 
+const ORDER_SYNC_URL = process.env.ORDER_URL;
+const SHARED_SECRET = process.env.SHARED_SECRET_KEY; 
 
 // Register Route
 router.post('/register', async (req, res) => {
@@ -26,23 +27,34 @@ router.post('/register', async (req, res) => {
             balance: newUser.rows[0].balance
         };
 
-        // SYNCING TO OTHER BACKEND
-        try {
-            await axios.post(OTHER_BACKEND_URL, userData, {
+        // SYNCING TO BOTH BACKENDS
+        // We use Promise.allSettled so that if one sync fails, it doesn't stop the other
+        await Promise.allSettled([
+            axios.post(INVENTORY_SYNC_URL, userData, {
                 headers: { 'x-auth-secret': SHARED_SECRET }
+            }),
+            axios.post(ORDER_SYNC_URL, userData, {
+                headers: { 'x-auth-secret': SHARED_SECRET }
+            })
+        ]).then(results => {
+            results.forEach((result, index) => {
+                const service = index === 0 ? "Inventory" : "Order";
+                if (result.status === 'rejected') {
+                    console.error(`❌ ${service} Sync failed:`, result.reason.message);
+                } else {
+                    console.log(`✅ ${service} Sync successful`);
+                }
             });
-        } catch (syncErr) {
-            console.error("Sync failed, but user was created locally:", syncErr.message);
-            // We still return 201 because the user is in our DB
-        }
+        });
 
         res.status(201).json(userData);
     } catch (err) {
+        console.error("Registration Error:", err.message);
         res.status(500).json({ error: "Registration failed" });
     }
 });
 
-// Login Route
+// Login Route remains mostly the same, but ensure it uses process.env.JWT_SECRET
 router.post('/login', async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -58,10 +70,7 @@ router.post('/login', async (req, res) => {
             balance: user.rows[0].balance
         };
 
-        const token = jwt.sign({ userId: userData.userId }, 'your_jwt_secret', { expiresIn: '1h' });
-
-        // Optional: Sync login status to other backend
-        // await axios.post(`${OTHER_BACKEND_URL}/login-event`, userData);
+        const token = jwt.sign({ userId: userData.userId }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
 
         res.json({ message: "Logged in successfully!", token, user: userData });
     } catch (err) {

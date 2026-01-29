@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. Database Service
+  # 1. Main Database
   db:
     image: postgres:15-alpine
     restart: always
@@ -10,11 +10,11 @@ services:
       POSTGRES_PASSWORD: NewPassword123
       POSTGRES_DB: login_db
     ports:
-      - "5432:5432"
+      - "5433:5432" # HOST 5433 maps to CONTAINER 5432 (Bypasses your local conflict)
     volumes:
       - ./back/init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  # 2. Your Auth Backend (The one we just updated)
+  # 2. Auth Backend
   backend:
     build: ./back
     restart: always
@@ -31,13 +31,57 @@ services:
       - DB_PASSWORD=NewPassword123
       - DB_NAME=login_db
       - JWT_SECRET=your_jwt_secret
-      - SHARED_SECRET=your_internal_secret_key
-      # This points to the service name 'other-backend' defined below
-      - OTHER_BACKEND_URL=http://other-backend:5000/api/users/sync
+      - SHARED_SECRET_KEY=your_internal_secret_key
+      # Internal Docker URLs
+      - INVENTORY_URL=http://inventory:3002/api/users/sync
+      - ORDER_URL=http://order-service:3003/api/orders/sync-incoming
 
-  # 3. The Other Backend (The one receiving the REST data)
+  # 3. Inventory Service
+  inventory:
+    build: ./inventory
+    restart: always
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./inventory:/app
+      - /app/node_modules
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_USER=postgres
+      - DB_PASSWORD=NewPassword123
+      - DB_NAME=login_db
+      - SHARED_SECRET_KEY=your_internal_secret_key
 
-  # 4. Frontend Service
+  # 4. Order Database
+  order-db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: orderdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: NewPassword123
+    # No ports section needed (internal only)
+    volumes:
+      - ./order/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # 5. Order Service
+  order-service:
+    build: ./order
+    restart: always
+    ports:
+      - "3003:3003"
+    depends_on:
+      - order-db
+    environment:
+      - DB_HOST=order-db
+      - DB_USER=postgres
+      - DB_PASSWORD=NewPassword123
+      - DB_NAME=orderdb
+      - SHARED_SECRET_KEY=your_internal_secret_key
+
+  # 6. Frontend
   frontend:
     build: ./front
     ports:
@@ -47,12 +91,4 @@ services:
       - /app/node_modules
     depends_on:
       - backend
-  #order
-  product-db:
-  image: postgres:15
-  environment:
-    POSTGRES_DB: productdb
-    POSTGRES_USER: product
-    POSTGRES_PASSWORD: productpass
-  volumes:
-    - ./product/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - inventory

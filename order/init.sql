@@ -1,12 +1,9 @@
-CREATE TABLE IF NOT EXISTS products (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(100),
-  price INT,
-  stock INT
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,       -- This was the missing column
+    total_price DECIMAL(10, 2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-INSERT INTO products (name, price, stock)
-VALUES
-  ('Laptop', 800, 5),
-  ('Phone', 400, 10),
-  ('Headphone', 100, 20);

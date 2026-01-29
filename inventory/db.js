@@ -1,33 +1,21 @@
-import pg from 'pg';
+import pkg from 'pg';
 import dotenv from 'dotenv';
 
-// Initialize environment variables
 dotenv.config();
+const { Pool } = pkg;
 
-const { Pool } = pg;
-
-/**
- * DATABASE CONFIGURATION
- * The DATABASE_URL is pulled from your .env file.
- * Example format: postgres://user:password@host:port/database
- */
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    // Connection Pool Settings
-    max: 20,                // Max number of clients in the pool
-    idleTimeoutMillis: 30000, // How long a client is allowed to sit idle before being closed
-    connectionTimeoutMillis: 2000, // How long to wait when connecting before timing out
+    // crucial: Use the variable from docker-compose, or default to 'db'
+    host: process.env.DB_HOST || 'db', 
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'NewPassword123',
+    database: process.env.DB_NAME || 'login_db',
+    port: 5432 // Internal Docker port is always 5432
 });
 
-// Listener for pool errors to prevent the service from crashing unexpectedly
-pool.on('error', (err) => {
-    console.error('Unexpected error on idle PostgreSQL client', err);
-    process.exit(-1);
-});
+// Test the connection on startup
+pool.connect()
+    .then(() => console.log('✅ Inventory connected to Database (db)'))
+    .catch(err => console.error('❌ Database Connection Error:', err.message));
 
-/**
- * Export the pool to be used in:
- * 1. index.js (for health checks and inventory updates)
- * 2. routes/auth.js (for user registration and product fetching)
- */
 export { pool };

@@ -1,8 +1,4 @@
-CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    username VARCHAR(100) UNIQUE NOT NULL,
-    password TEXT NOT NULL
-);
+
 
 CREATE TABLE IF NOT EXISTS inventory (
     id SERIAL PRIMARY KEY,
@@ -13,8 +9,3 @@ CREATE TABLE IF NOT EXISTS inventory (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS idempotency_keys (
-    key_text VARCHAR(255) PRIMARY KEY,
-    response_payload JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);

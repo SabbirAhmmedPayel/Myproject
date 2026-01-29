@@ -7,8 +7,8 @@ WORKDIR /app
 # Copying package files first helps with Docker caching
 COPY package*.json ./
 
-# Install only production dependencies
-RUN npm install --production
+# Install dependencies
+RUN npm install
 
 # Bundle app source
 COPY . .
