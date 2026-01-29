@@ -1,0 +1,7 @@
+ Language: Node.js (v18+)
+Framework: Express.js
+Database: PostgreSQL (via pg driver)
+ HTTP Client: Axios
+ Security: Bcrypt (for passwords), CORS
+Utilities: Dotenv (env management)
+Middleware: Body-parser (built into express)
