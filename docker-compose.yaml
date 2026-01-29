@@ -1,8 +1,8 @@
 version: '3.8'
 
 services:
-  # 1. Main Database
-  db:
+  # 1. Auth Database
+  auth-db:
     image: postgres:15-alpine
     restart: always
     environment:
@@ -10,63 +10,73 @@ services:
       POSTGRES_PASSWORD: NewPassword123
       POSTGRES_DB: login_db
     ports:
-      - "5433:5432" # HOST 5433 maps to CONTAINER 5432 (Bypasses your local conflict)
+      - "5433:5432"
     volumes:
       - ./back/init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  # 2. Auth Backend
+  # 2. Inventory Database
+  inventory-db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: NewPassword123
+      POSTGRES_DB: inventory_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./inventory/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # 3. Order Database
+  order-db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: NewPassword123
+      POSTGRES_DB: orderdb
+    ports:
+      - "5435:5432"
+    volumes:
+      - ./order/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # 4. Auth Backend
   backend:
     build: ./back
     restart: always
     ports:
       - "3000:3000"
-    volumes:
-      - ./back:/app
-      - /app/node_modules
     depends_on:
-      - db
+      - auth-db
     environment:
-      - DB_HOST=db
+      - DB_HOST=auth-db
       - DB_USER=postgres
       - DB_PASSWORD=NewPassword123
       - DB_NAME=login_db
       - JWT_SECRET=your_jwt_secret
       - SHARED_SECRET_KEY=your_internal_secret_key
-      # Internal Docker URLs
       - INVENTORY_URL=http://inventory:3002/api/users/sync
       - ORDER_URL=http://order-service:3003/api/orders/sync-incoming
 
-  # 3. Inventory Service
+  # 5. Inventory Service
   inventory:
     build: ./inventory
     restart: always
     ports:
       - "3002:3002"
-    volumes:
-      - ./inventory:/app
-      - /app/node_modules
     depends_on:
-      - db
+      - inventory-db
     environment:
-      - DB_HOST=db
+      - DB_HOST=inventory-db
       - DB_USER=postgres
       - DB_PASSWORD=NewPassword123
-      - DB_NAME=login_db
+      - DB_NAME=inventory_db
+      - JWT_SECRET=your_jwt_secret
       - SHARED_SECRET_KEY=your_internal_secret_key
+      - ORDER_SERVICE_URL=http://order-service:3003/api/orders/receive-product
+      - ENABLE_GREMLIN_LATENCY=true 
 
-  # 4. Order Database
-  order-db:
-    image: postgres:15-alpine
-    restart: always
-    environment:
-      POSTGRES_DB: orderdb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: NewPassword123
-    # No ports section needed (internal only)
-    volumes:
-      - ./order/init.sql:/docker-entrypoint-initdb.d/init.sql
-
-  # 5. Order Service
+  # 6. Order Service
   order-service:
     build: ./order
     restart: always
@@ -80,15 +90,14 @@ services:
       - DB_PASSWORD=NewPassword123
       - DB_NAME=orderdb
       - SHARED_SECRET_KEY=your_internal_secret_key
+      - INVENTORY_SERVICE_URL=http://inventory:3002/api/inventory/update-stock
 
-  # 6. Frontend
+  # 7. Frontend
   frontend:
     build: ./front
     ports:
       - "8080:5173"
-    volumes:
-      - ./front:/app
-      - /app/node_modules
     depends_on:
       - backend
       - inventory
+      - order-service

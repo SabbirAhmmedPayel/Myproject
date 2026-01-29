@@ -1,16 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import SingleProduct from '../components/SingleProduct';
 import '../style/inventory.css';
 
 const Inventory = () => {
+  const navigate = useNavigate();
+  
+  // --- STATE MANAGEMENT ---
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
-  const navigate = useNavigate();
+  const [orderMessage, setOrderMessage] = useState('');
+  
+  // Performance & Visual Alert States (Requirement: 1s Threshold [cite: 53])
+  const [responseTime, setResponseTime] = useState(0);
+  const [isLatent, setIsLatent] = useState(false);
+  
+  // Health States (Requirement: Downstream Dependency Checking [cite: 51, 52])
+  const [healthStatus, setHealthStatus] = useState({ order: 'checking', inventory: 'checking' });
 
-  // Form State
   const [formData, setFormData] = useState({
     product_name: '',
     sku: '',
@@ -18,6 +26,30 @@ const Inventory = () => {
     quantity: ''
   });
 
+  // --- HEALTH MONITORING (Requirement: Visual Alerting [cite: 49]) ---
+  const checkHealth = useCallback(async () => {
+    try {
+      const [orderRes, invRes] = await Promise.all([
+        axios.get('http://localhost:3003/api/orders/health').catch(() => ({ data: { status: 'offline' } })),
+        axios.get('http://localhost:3002/api/inventory/health').catch(() => ({ data: { status: 'offline' } }))
+      ]);
+
+      setHealthStatus({
+        order: orderRes.data.status === 'healthy' ? 'Operational' : 'Critical',
+        inventory: invRes.data.status === 'healthy' ? 'Operational' : 'Critical'
+      });
+    } catch (err) {
+      console.error("Health monitoring failed", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkHealth();
+    const interval = setInterval(checkHealth, 10000); // Polling for live status [cite: 40]
+    return () => clearInterval(interval);
+  }, [checkHealth]);
+
+  // --- DATA FETCHING ---
   useEffect(() => {
     const fetchProducts = async () => {
       setLoading(true);
@@ -33,21 +65,47 @@ const Inventory = () => {
     fetchProducts();
   }, []);
 
+  // --- ORDER LOGIC (Requirement: Gremlin Resilience & Visual Alerts [cite: 29, 33, 53]) ---
+  const placeOrder = async (product) => {
+    const startTime = performance.now();
+    setOrderMessage(`Processing order for ${product.product_name}...`);
+    
+    try {
+      // 3.5s timeout to catch "Gremlin Latency" [cite: 26, 31]
+      const res = await axios.post('http://localhost:3003/api/orders/create', {
+        user_id: 1, 
+        product_id: product.id,
+        quantity: 1,
+        price_per_unit: product.price
+      }, { timeout: 3500 });
+
+      const duration = (performance.now() - startTime) / 1000;
+      setResponseTime(duration.toFixed(2));
+      
+      // Visual Alert: Turn RED if > 1 second [cite: 53]
+      setIsLatent(duration > 1);
+      setOrderMessage(`✅ Success: ${res.data.message} (${duration.toFixed(2)}s)`);
+    } catch (err) {
+      setIsLatent(true); 
+      if (err.code === 'ECONNABORTED') {
+        setOrderMessage('⚠️ Gremlin Detected: Inventory Service timed out.');
+      } else {
+        setOrderMessage('❌ Schrödinger\'s Crash: Partial failure detected[cite: 63, 64].');
+      }
+    }
+    setTimeout(() => setOrderMessage(''), 5000);
+  };
+
   const handleSync = async (e) => {
     e.preventDefault();
     setLoading(true);
     setSyncStatus('syncing');
-
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await axios.post('http://localhost:3002/auth/sync-product', formData, {
+      const response = await axios.post('http://localhost:3002/api/inventory/sync-product', formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
-
-      if (response.data.success) {
-        setSyncStatus('success');
-        // Refresh list logic here
-      }
+      if (response.data.success) setSyncStatus('success');
     } catch (err) {
       setSyncStatus('error');
     } finally {
@@ -57,300 +115,131 @@ const Inventory = () => {
   };
 
   return (
-    <div className="inventory-container app-container">
+    <div className="inventory-container app-container text-slate-200">
+      <div className="relative z-10 max-w-7xl mx-auto py-10 px-6">
+        
+        {/* HEADER & MONITORING DASHBOARD */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+          <div>
+            <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+              Valerix Core
+            </h1>
+            <p className="text-slate-400 text-sm mt-2 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+              Resilient Microservice Gateway [cite: 15, 22]
+            </p>
+          </div>
 
-      {/* Premium Background Effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl"></div>
-      </div>
-
-      <div className="relative z-10">
-        {/* Header Section */}
-        <div className="max-w-7xl mx-auto mb-12">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/30 text-xl">
-                  <span className="text-white">✨</span>
-                </div>
-                <h1 className="text-5xl font-bold tracking-tight">
-                  <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">
-                    Valerix Core
-                  </span>
-                </h1>
+          <div className="flex flex-wrap gap-4 items-center">
+            {/* Latency Alert Component (Requirement: 1s Red/Green Switch [cite: 53]) */}
+            <div className={`flex items-center gap-3 px-5 py-2 rounded-2xl border backdrop-blur-xl transition-colors ${isLatent ? 'border-red-500/50 bg-red-500/10' : 'border-emerald-500/50 bg-emerald-500/10'}`}>
+              <div className="text-right">
+                <p className="text-[10px] uppercase font-bold text-slate-400">Response</p>
+                <p className={`font-mono font-bold ${isLatent ? 'text-red-400' : 'text-emerald-400'}`}>{responseTime}s</p>
               </div>
-              <p className="text-slate-400 text-sm ml-14 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                Premium Inventory Management System
-              </p>
+              <div className={`w-3 h-3 rounded-full ${isLatent ? 'bg-red-500 animate-ping' : 'bg-emerald-500'}`}></div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/20 backdrop-blur-xl">
-                <div className="flex items-center gap-3">
-                  <span className="text-cyan-400">✅</span>
-                  <div>
-                    <p className="text-xs text-slate-400">System Status</p>
-                    <p className="text-sm font-semibold text-cyan-400">Operational</p>
-                  </div>
-                </div>
+            {/* Health Status (Requirement: Sophisticated Health Checking [cite: 49, 50]) */}
+            <div className="flex gap-2">
+              <div className="px-4 py-2 rounded-xl border border-slate-700 bg-slate-800/50">
+                <p className="text-[10px] uppercase text-slate-500">Order Svc</p>
+                <p className={`text-xs font-bold ${healthStatus.order === 'Operational' ? 'text-emerald-400' : 'text-red-400'}`}>{healthStatus.order}</p>
               </div>
-              <div>
-                <button
-                  onClick={() => navigate('/create-product')}
-                  className="px-4 py-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
-                >
-                  Create Product
-                </button>
+              <div className="px-4 py-2 rounded-xl border border-slate-700 bg-slate-800/50">
+                <p className="text-[10px] uppercase text-slate-500">Inv Svc</p>
+                <p className={`text-xs font-bold ${healthStatus.inventory === 'Operational' ? 'text-emerald-400' : 'text-red-400'}`}>{healthStatus.inventory}</p>
               </div>
             </div>
+
+            <button onClick={() => navigate('/create-product')} className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-lg shadow-emerald-900/20">
+              Create Product
+            </button>
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* NOTIFICATION WINDOW (Requirement: User-friendly messages [cite: 31, 33]) */}
+        {orderMessage && (
+          <div className="mb-8 p-4 rounded-2xl bg-slate-800 border border-blue-500/30 text-center text-sm font-semibold shadow-xl animate-in fade-in slide-in-from-top-4">
+            {orderMessage}
+          </div>
+        )}
 
-          {/* Input Card - Premium Design */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* SYNC FORM (Legacy Asset Input [cite: 13]) */}
           <div className="lg:col-span-1">
-            <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/40 backdrop-blur-2xl border border-slate-700/50 rounded-3xl shadow-2xl shadow-blue-900/20 overflow-hidden">
-
-              {/* Card Header */}
-              <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-b border-blue-500/20 p-6">
-                <h2 className="text-xl font-bold flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-lg">
-                    <span className="text-white">📦</span>
-                  </div>
-                  <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                    New Asset
-                  </span>
-                </h2>
-              </div>
-
-              {/* Form */}
-              <form onSubmit={handleSync} className="p-6 space-y-6">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-widest text-blue-400 mb-3">
-                    Product Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter product name"
-                    className="w-full bg-slate-900/60 border border-slate-700/50 rounded-2xl px-5 py-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300"
-                    onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
-                  />
-                </div>
-
+            <div className="bg-slate-800/40 backdrop-blur-2xl border border-slate-700 rounded-3xl p-8">
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-3">
+                <span className="text-blue-400">📦</span> New Asset
+              </h2>
+              <form onSubmit={handleSync} className="space-y-5">
+                <input 
+                  type="text" 
+                  placeholder="Product Name" 
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-5 py-3 focus:border-blue-500 outline-none transition-all"
+                  onChange={(e) => setFormData({ ...formData, product_name: e.target.value })} 
+                />
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-widest text-blue-400 mb-3">
-                      Price
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                      <input
-                        type="number"
-                        placeholder="0.00"
-                        className="w-full bg-slate-900/60 border border-slate-700/50 rounded-2xl pl-11 pr-5 py-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300"
-                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-widest text-blue-400 mb-3">
-                      Quantity
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="0"
-                      className="w-full bg-slate-900/60 border border-slate-700/50 rounded-2xl px-5 py-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300"
-                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                    />
-                  </div>
+                  <input type="number" placeholder="Price" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-5 py-3 outline-none" onChange={(e) => setFormData({ ...formData, price: e.target.value })} />
+                  <input type="number" placeholder="Stock" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-5 py-3 outline-none" onChange={(e) => setFormData({ ...formData, quantity: e.target.value })} />
                 </div>
-
-                <button
-                  disabled={loading}
-                  className={`w-full py-4 rounded-2xl font-bold uppercase tracking-widest transition-all duration-300 flex justify-center items-center gap-3 relative overflow-hidden group ${syncStatus === 'success'
-                      ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 shadow-lg shadow-emerald-500/30'
-                      : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 shadow-lg shadow-blue-500/30'
-                    } text-white`}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
-                  {loading ? (
-                    <span className="animate-spin">⟳</span>
-                  ) : (
-                    <span>🗄️</span>
-                  )}
-                  <span className="relative z-10">
-                    {syncStatus === 'success' ? 'Successfully Synced' : 'Sync to Orders'}
-                  </span>
+                <button disabled={loading} className="w-full py-4 rounded-xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:brightness-110 transition-all shadow-lg shadow-blue-900/40">
+                  {loading ? 'SYNCING...' : 'SYNC TO ORDERS'}
                 </button>
               </form>
             </div>
-
-            {/* Stats Card */}
-            <div className="mt-6 grid grid-cols-2 gap-4">
-              <div className="bg-gradient-to-br from-blue-500/10 to-transparent backdrop-blur-xl border border-blue-500/20 rounded-2xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-blue-400">📈</span>
-                  <p className="text-xs text-slate-400 font-semibold">Total Value</p>
-                </div>
-                <p className="text-2xl font-bold text-white">$124.5K</p>
-              </div>
-              <div className="bg-gradient-to-br from-cyan-500/10 to-transparent backdrop-blur-xl border border-cyan-500/20 rounded-2xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-cyan-400">🗄️</span>
-                  <p className="text-xs text-slate-400 font-semibold">Items</p>
-                </div>
-                <p className="text-2xl font-bold text-white">1,247</p>
-              </div>
-            </div>
           </div>
 
-          {/* Inventory Monitor - Premium Table */}
+          {/* INVENTORY TABLE (Requirement: Minimal Human Window [cite: 75, 76]) */}
           <div className="lg:col-span-2">
-            <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/40 backdrop-blur-2xl border border-slate-700/50 rounded-3xl overflow-hidden shadow-2xl shadow-blue-900/20">
-
-              {/* Table Header */}
-              <div className="p-6 border-b border-slate-700/50 bg-gradient-to-r from-blue-500/10 to-cyan-500/10">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-xl bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                    Active Inventory
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                    <span className="text-xs text-cyan-400 font-semibold">Live</span>
-                  </div>
-                </div>
+            <div className="bg-slate-800/40 backdrop-blur-2xl border border-slate-700 rounded-3xl overflow-hidden shadow-2xl">
+              <div className="p-6 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                <h3 className="font-bold text-lg">Active Inventory Monitor</h3>
+                <span className="flex items-center gap-2 text-[10px] font-bold text-cyan-400 uppercase tracking-widest">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                  Live Data Flow [cite: 41]
+                </span>
               </div>
-
-              {/* Cards: SingleProduct view */}
-              <div className="mb-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {products.length === 0 && !loading && <div className="text-slate-400">No products</div>}
-                  {products.map(p => (
-                    <SingleProduct key={p.id || p.sku} product={p} />
-                  ))}
-                </div>
-              </div>
-
-              {/* Table */}
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full text-left">
                   <thead>
-                    <tr className="border-b border-slate-700/50">
-                      <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-blue-400">
-                        Asset Name
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-blue-400">
-                        Price
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-blue-400">
-                        Stock
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-blue-400">
-                        Status
-                      </th>
+                    <tr className="text-[10px] uppercase font-bold text-slate-500 border-b border-slate-700/50">
+                      <th className="px-8 py-5">Asset</th>
+                      <th className="px-8 py-5">Value</th>
+                      <th className="px-8 py-5">Stock</th>
+                      <th className="px-8 py-5 text-center">Operation</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/30">
-                    {/* Sample Rows */}
-                    <tr className="hover:bg-blue-500/5 transition-all duration-300 group">
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center border border-blue-500/30 text-lg">
-                            <span className="text-blue-400">📦</span>
+                    {products.map(p => (
+                      <tr key={p.sku} className="hover:bg-blue-500/5 transition-colors">
+                        <td className="px-8 py-5 font-bold text-white">{p.product_name}</td>
+                        <td className="px-8 py-5 font-mono text-sm text-slate-400">${p.price}</td>
+                        <td className="px-8 py-5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${Math.min(p.quantity, 100)}%` }}></div>
+                            </div>
+                            <span className="text-xs font-mono">{p.quantity}</span>
                           </div>
-                          <span className="font-semibold text-white group-hover:text-blue-400 transition-colors">
-                            Neural Link V2
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className="text-slate-300 font-mono text-sm">$2,499.00</span>
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-                            <div className="h-full w-3/4 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"></div>
-                          </div>
-                          <span className="font-mono text-sm text-slate-400">42</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                          In Sync
-                        </span>
-                      </td>
-                    </tr>
-
-                    <tr className="hover:bg-blue-500/5 transition-all duration-300 group">
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center border border-blue-500/30 text-lg">
-                            <span className="text-blue-400">📦</span>
-                          </div>
-                          <span className="font-semibold text-white group-hover:text-blue-400 transition-colors">
-                            Quantum Processor X1
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className="text-slate-300 font-mono text-sm">$4,299.00</span>
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-                            <div className="h-full w-1/2 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"></div>
-                          </div>
-                          <span className="font-mono text-sm text-slate-400">28</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                          In Sync
-                        </span>
-                      </td>
-                    </tr>
-
-                    <tr className="hover:bg-blue-500/5 transition-all duration-300 group">
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center border border-blue-500/30 text-lg">
-                            <span className="text-blue-400">📦</span>
-                          </div>
-                          <span className="font-semibold text-white group-hover:text-blue-400 transition-colors">
-                            Holographic Display Pro
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className="text-slate-300 font-mono text-sm">$1,899.00</span>
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-                            <div className="h-full w-4/5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"></div>
-                          </div>
-                          <span className="font-mono text-sm text-slate-400">67</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                          In Sync
-                        </span>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-8 py-5 text-center">
+                          <button 
+                            onClick={() => placeOrder(p)} 
+                            className="px-5 py-2 rounded-xl bg-blue-500/10 border border-blue-500/40 text-blue-400 text-[10px] font-black uppercase hover:bg-blue-500 hover:text-white transition-all"
+                          >
+                            Place Order [cite: 59, 60]
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>
