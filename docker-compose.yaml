@@ -1,23 +1,23 @@
 version: '3.8'
 
 services:
-  # Database Service
+  # 1. Database Service
   db:
     image: postgres:15-alpine
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: NewPassword123  # Match this with your .env
+      POSTGRES_PASSWORD: NewPassword123
       POSTGRES_DB: login_db
     ports:
       - "5432:5432"
     volumes:
-      # This maps your local file to the Postgres init folder
       - ./back/init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  # Backend Service
+  # 2. Your Auth Backend (The one we just updated)
   backend:
     build: ./back
+    restart: always
     ports:
       - "3000:3000"
     volumes:
@@ -26,12 +26,18 @@ services:
     depends_on:
       - db
     environment:
-      DB_HOST: db
-      DB_USER: postgres
-      DB_PASSWORD: NewPassword123
-      DB_NAME: login_db
+      - DB_HOST=db
+      - DB_USER=postgres
+      - DB_PASSWORD=NewPassword123
+      - DB_NAME=login_db
+      - JWT_SECRET=your_jwt_secret
+      - SHARED_SECRET=your_internal_secret_key
+      # This points to the service name 'other-backend' defined below
+      - OTHER_BACKEND_URL=http://other-backend:5000/api/users/sync
 
-  # Frontend Service
+  # 3. The Other Backend (The one receiving the REST data)
+
+  # 4. Frontend Service
   frontend:
     build: ./front
     ports:
